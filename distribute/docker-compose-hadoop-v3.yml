@@ -1,0 +1,102 @@
+version: '3'
+
+services:
+  namenode:
+    image: nexus:8091/hadoop-namenode:2.0.0
+    networks:
+      - hbase
+    volumes:
+      - namenode:/hadoop/dfs/name
+    environment:
+      - CLUSTER_NAME=test
+    env_file:
+      - ./hadoop.env
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == manager37
+      labels:
+        traefik.docker.network: hbase
+        traefik.port: 9870
+
+  datanode:
+    image: nexus:8091/hadoop-datanode:2.0.0
+    networks:
+      - hbase
+    volumes:
+      - datanode:/hadoop/dfs/data
+    env_file:
+      - ./hadoop.env
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870"
+    deploy:
+      mode: global
+      labels:
+        traefik.docker.network: hbase
+        traefik.port: 9864
+
+  resourcemanager:
+    image: nexus:8091/hadoop-resourcemanager:2.0.0
+    networks:
+      - hbase
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864"
+    env_file:
+      - ./hadoop.env
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == manager37
+      labels:
+        traefik.docker.network: hbase
+        traefik.port: 8088
+    healthcheck:
+      disable: true
+
+  nodemanager:
+    image: nexus:8091/hadoop-nodemanager:2.0.0
+    networks:
+      - hbase
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    deploy:
+      mode: global
+      labels:
+        traefik.docker.network: hbase
+        traefik.port: 8042
+
+  historyserver:
+    image: nexus:8091/hadoop-historyserver:2.0.0
+    networks:
+      - hbase
+    volumes:
+      - hadoop_historyserver:/hadoop/yarn/timeline
+    environment:
+      SERVICE_PRECONDITION: "namenode:9870 datanode:9864 resourcemanager:8088"
+    env_file:
+      - ./hadoop.env
+    deploy:
+      mode: replicated
+      replicas: 1
+      placement:
+        constraints:
+          - node.hostname == manager37
+      labels:
+        traefik.docker.network: hbase
+        traefik.port: 8188
+
+volumes:
+  datanode:
+  namenode:
+  hadoop_historyserver:
+
+networks:
+  hbase:
+    external:
+      name: hbase
